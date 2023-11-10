@@ -37,19 +37,24 @@ public class HostScanner implements Runnable{
                 InetAddress IAddress = InetAddress.getByName(IPAddress);
                 setReachable(IAddress.isReachable(TimeOut));
             } catch (Exception e) {
-                if(ShowErrors) System.out.printf("IP Address %s check error: %s\n", IPAddress, e.getMessage());
                 setReachable(false);
+                if(ShowErrors) System.out.printf("IP Address %s check error: %s\n", IPAddress, e.getMessage());
             }
         }else{
+            int portsAvailable = 0;
             for(int Port=0; Port<=65535; Port++){
                 try (Socket socket = new Socket()) {
                     socket.connect(new InetSocketAddress(IPAddress, Port), TimeOut);
-                    System.out.printf("%s is available!\n", IPAddress+":"+Port);
+                    portsAvailable++;
+                    System.out.printf("%s is reachable!\n", IPAddress+":"+Port);
                 } catch (Exception e) {
                     if(ShowErrors) System.out.printf("IP Address %s check error: %s\n", IPAddress+":"+Port, e.getMessage());
                 }
+                if(Port!=0 && (Port%10000==0 || Port==65535)) {
+                    System.out.printf("Completed scanning up to port %d \n", Port);
+                }
             }
-
+            System.out.printf("%d ports is reachable\n", portsAvailable);
         }
     }
 }

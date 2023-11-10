@@ -4,11 +4,10 @@ public class Main {
     public static void main(String[] args) {
 
         String NetworkAddress, UserAnswer;
-        short HostAddress, PartAddress, BeginIndex,EndIndex;
-        int TimeOut;
-        boolean Errors = false, AddressesAvailable, ShowErrors;
+        short HostAddress, PartAddress, HostsAvailable;
+        int BeginIndex,EndIndex, TimeOut;
+        boolean Errors = false, ShowErrors, UserAnswerYN;
         final Scanner sc = new Scanner(System.in);
-        //List<HostScanner>[] HostScanners = new List[256];
         HostScanner[] HostScanners = new HostScanner[256];
         Thread[] HostThreads = new Thread[256];
 
@@ -16,9 +15,15 @@ public class Main {
         do{
             System.out.print("Please enter an IP address in x.x.x format (Class C) to scan addresses from x.x.x.0 to x.x.x.255 (or enter 'q' to quit): ");
             UserAnswer = sc.nextLine();
+            sc.reset();
 
             //{проверка ввода
             if(UserAnswer.equalsIgnoreCase("q"))break;
+
+            if(UserAnswer.length()<=5){
+                System.out.println("Invalid address (too short).");
+                continue;
+            }
 
             BeginIndex = 0;
             for(int i=1; i<=3; i++){
@@ -35,7 +40,7 @@ public class Main {
                     break;
                 }
                 try{
-                    PartAddress = Short.valueOf(UserAnswer.substring(BeginIndex, EndIndex));
+                    PartAddress = Short.parseShort(UserAnswer.substring(BeginIndex, EndIndex));
                 }catch (NumberFormatException e){
                     System.out.printf("Invalid address ('%s' is not a number).\n", UserAnswer.substring(BeginIndex, EndIndex));
                     Errors = true;
@@ -55,10 +60,10 @@ public class Main {
             NetworkAddress=UserAnswer;
 
             // ввод значения задержки
-            TimeOut = InputTimeOut(5000);
+            TimeOut = InputTimeOut(1000);
 
             // ввод параметра отображения ошибок
-            ShowErrors = InputShowErrors();
+            ShowErrors = InputYN("Show connection errors (y/n)? ");
 
             //перебор адресов, запуск потоков под проверку каждого ip-адреса
              for(HostAddress=0; HostAddress<=255; HostAddress++){
@@ -67,50 +72,83 @@ public class Main {
                 HostThreads[HostAddress].start();
             }
 
-            // ожидание завершения потоков
+            // ожидание завершения потоков и вывод результатов
+            HostsAvailable = 0;
             for(HostAddress=0; HostAddress<=255; HostAddress++){
                 try {
                     HostThreads[HostAddress].join();
                 } catch (InterruptedException e) {
                      throw new RuntimeException(e);
                 }
-            }
-
-            // вывод результатов
-            AddressesAvailable = false;
-            for(HostAddress=0; HostAddress<=255; HostAddress++){
                 if(HostScanners[HostAddress].isReachable()){
                     System.out.printf("%s is reachable!\n", NetworkAddress+"."+HostAddress);
-                    AddressesAvailable = true;
+                    HostsAvailable++;
                 }
             }
+            System.out.printf("%d hosts is reachable\n", HostsAvailable);
 
             //запрос на сканирование портов
-            if(AddressesAvailable){
+            if(HostsAvailable>0){
                 do{
-                    System.out.print("Perform a port scan on available addresses (y/n)? ");
-                    UserAnswer = sc.nextLine();
-                    if(UserAnswer.equalsIgnoreCase("y")){
+                    UserAnswerYN = InputYN("Perform a port scan on reachable addresses (y/n)? ");
+                    if(UserAnswerYN){
 
                         //ввод задержки
-                        TimeOut = InputTimeOut(1000);
+                        TimeOut = InputTimeOut(100);
 
                         // ввод параметра отображения ошибок
-                        ShowErrors = InputShowErrors();
+                        ShowErrors = InputYN("Show connection errors (y/n)? ");
+
 
                         for(HostAddress=0; HostAddress<=255; HostAddress++){
                             if(HostScanners[HostAddress].isReachable()){
-                                System.out.printf("Search for available ports for the host %s ...\n", NetworkAddress+"."+HostAddress);
-                                HostScanners[HostAddress] = new HostScanner(NetworkAddress, HostAddress, TimeOut, ShowErrors, true);
-                                HostScanners[HostAddress].run();
+                                System.out.printf("Search for reachable ports for the host %s ...\n", NetworkAddress+"."+HostAddress);
+
+                                new HostScanner(NetworkAddress, HostAddress, TimeOut, ShowErrors, true).run();
+
+                                /* при запуске Threads активные порты не обнаруживаются, не использовать
+                                PortsAvailable=0;
+                                for(int i=0; i<=650; i++){
+                                    BeginIndex = i*100;
+                                    EndIndex = (i+1)*100-1;
+                                    if(EndIndex>65535) EndIndex=65535;
+
+                                    //перебор портов, запуск потоков под проверку каждого ip-адреса
+                                    for(Port=BeginIndex; Port<=EndIndex; Port++){
+                                        //PortScanners[Port] = new HostScanner(NetworkAddress, HostAddress, TimeOut, ShowErrors, Port);
+                                        //PortThreads[Port] = new Thread(HostScanners[HostAddress], NetworkAddress+"."+HostAddress+":"+Port);
+                                        //PortThreads[Port].start();
+                                        new HostScanner(NetworkAddress, HostAddress, TimeOut, ShowErrors, Port).run();
+                                        }
+
+                                    // ожидание завершения потоков и вывод результатов
+                                    for(Port=BeginIndex; Port<=EndIndex; Port++){
+                                        try {
+                                            PortThreads[Port].join();
+                                        } catch (InterruptedException e) {
+                                            throw new RuntimeException(e);
+                                        }
+                                        if(PortScanners[Port].isReachable()){
+                                            System.out.printf("%s is reachable!\n", NetworkAddress+"."+HostAddress+":"+Port);
+                                            PortsAvailable++;
+                                        }
+                                    }
+                                    if(i!=0 && i%100==0) {
+                                        System.out.printf("Completed scanning up to port %d \n", i);
+                                    }
+                                }
+                                //System.out.println("Completed scanning up to port 65535 \n");
+                                System.out.printf("%d ports is reachable\n", PortsAvailable);*/
+
+                                HostsAvailable--;
+                                if(HostsAvailable>0){
+                                    UserAnswerYN = InputYN("Continue (y/n)? ");
+                                    if(!UserAnswerYN) break;
+                                }
                             }
                         }
-
-                    } else if (UserAnswer.equalsIgnoreCase("n")) {
-                        break;
-                    }else{
-                        System.out.println("Incorrect input");
-                    }
+                        if(!UserAnswerYN) break;
+                    } else break;
                 }while (true);
             }
 
@@ -121,13 +159,14 @@ public class Main {
         System.out.println("The program has finished its work.");
     }
 
-    static boolean InputShowErrors(){
+    static boolean InputYN(String Message){
         do{
             String UserAnswer;
             final Scanner sc = new Scanner(System.in);
 
-            System.out.print("Show connection errors (y/n)? ");
+            System.out.print(Message);
             UserAnswer = sc.nextLine();
+            sc.reset();
             if(UserAnswer.equalsIgnoreCase("y")){
                 return true;
             }else if(UserAnswer.equalsIgnoreCase("n")){
@@ -145,6 +184,7 @@ public class Main {
             try {
                 TimeOut = sc.nextInt();
                 sc.nextLine();
+                sc.reset();
             }catch (Exception e){
                 TimeOut=-1;
             }
